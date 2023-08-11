@@ -4,23 +4,29 @@ from .constants import BOT_WELCOME_MESSAGE, PYTHON_QUESTION_LIST
 
 def generate_bot_responses(message, session):
     bot_responses = []
+    next_question_id = None
+    if "answers" not in session:
+        session["answers"] = {}
 
     current_question_id = session.get("current_question_id")
-    if not current_question_id:
+    if current_question_id is None:
         bot_responses.append(BOT_WELCOME_MESSAGE)
 
     success, error = record_current_answer(message, current_question_id, session)
 
     if not success:
-        return [error]
-
-    next_question, next_question_id = get_next_question(current_question_id)
-
-    if next_question:
-        bot_responses.append(next_question)
+        bot_responses.append(error)
     else:
-        final_response = generate_final_response(session)
-        bot_responses.append(final_response)
+        next_question, next_question_id = get_next_question(current_question_id)
+
+        if next_question:
+            question_info = PYTHON_QUESTION_LIST[next_question_id]
+            options_text = "\n".join(f"{index+1}. {option}" for index, option in enumerate(question_info['options']))
+            next_question_with_options = f"{question_info['question_text']}\nOptions:\n{options_text}"
+            bot_responses.append(next_question_with_options)
+        else:
+            final_response = generate_final_response(session)
+            bot_responses.append(final_response)
 
     session["current_question_id"] = next_question_id
     session.save()
@@ -33,12 +39,12 @@ def record_current_answer(answer, current_question_id, session):
     Validates and stores the answer for the current question to session.
     '''
     if not current_question_id:
-        return False, "No question to answer."
+        return True, ""
 
     question = PYTHON_QUESTION_LIST[current_question_id]
 
     if answer not in question['options']:
-        return False, "Invalid answer. Please select a valid option."
+        return PYTHON_QUESTION_LIST[current_question_id]['options']
 
     # Store the user's answer in the session for later evaluation
     session["answers"][current_question_id] = answer
@@ -51,7 +57,7 @@ def get_next_question(current_question_id):
     '''
     Fetches the next question from the PYTHON_QUESTION_LIST based on the current_question_id.
     '''
-    if not current_question_id:
+    if current_question_id is None:
         next_question_id = 0
     else:
         next_question_id = current_question_id + 1
